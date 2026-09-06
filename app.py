@@ -1,22 +1,63 @@
 import os, sqlite3
+import psycopg2
+from psycopg2.extras import DictCursor
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY','change-this-before-going-public')
+DATABASE_URL = os.getenv('DATABASE_URL')
 DB_PATH = os.getenv('DATABASE_PATH','truckos.db')
 
+class DB:
+    def __init__(self):
+        self.is_postgres = bool(DATABASE_URL)
+        if self.is_postgres:
+            self.conn = psycopg2.connect(DATABASE_URL)
+            self.cur = self.conn.cursor(cursor_factory=DictCursor)
+        else:
+            self.conn = sqlite3.connect(DB_PATH)
+            self.conn.row_factory = sqlite3.Row
+            self.cur = self.conn.cursor()
+
+    def execute(self, sql, params=()):
+        if self.is_postgres:
+            sql = sql.replace('?', '%s')
+        self.cur.execute(sql, params)
+        return self.cur
+
+    def commit(self):
+        self.conn.commit()
+
+    def close(self):
+        self.cur.close()
+        self.conn.close()
+
 def db():
-    c=sqlite3.connect(DB_PATH); c.row_factory=sqlite3.Row; return c
+    return DB()
 
 def init_db():
-    c=db(); c.executescript('''
-    CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,created_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS trucks(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,name TEXT NOT NULL,plate TEXT NOT NULL,km INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS services(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,truck_id INTEGER NOT NULL,service_date TEXT NOT NULL,km INTEGER NOT NULL,note TEXT NOT NULL,created_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS diagnoses(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,truck_id INTEGER NOT NULL,fault_code TEXT,symptoms TEXT NOT NULL,answer TEXT NOT NULL,created_at TEXT NOT NULL);
-    '''); c.commit(); c.close()
+    c=db()
+    if c.is_postgres:
+        statements = [
+            '''CREATE TABLE IF NOT EXISTS users(id SERIAL PRIMARY KEY,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,created_at TEXT NOT NULL)''',
+            '''CREATE TABLE IF NOT EXISTS trucks(id SERIAL PRIMARY KEY,user_id INTEGER NOT NULL,name TEXT NOT NULL,plate TEXT NOT NULL,km INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL)''',
+            '''CREATE TABLE IF NOT EXISTS services(id SERIAL PRIMARY KEY,user_id INTEGER NOT NULL,truck_id INTEGER NOT NULL,service_date TEXT NOT NULL,km INTEGER NOT NULL,note TEXT NOT NULL,created_at TEXT NOT NULL)''',
+            '''CREATE TABLE IF NOT EXISTS diagnoses(id SERIAL PRIMARY KEY,user_id INTEGER NOT NULL,truck_id INTEGER NOT NULL,fault_code TEXT,symptoms TEXT NOT NULL,answer TEXT NOT NULL,created_at TEXT NOT NULL)'''
+        ]
+        for stmt in statements:
+            c.execute(stmt)
+    else:
+        statements = [
+            '''CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,created_at TEXT NOT NULL)''',
+            '''CREATE TABLE IF NOT EXISTS trucks(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,name TEXT NOT NULL,plate TEXT NOT NULL,km INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL)''',
+            '''CREATE TABLE IF NOT EXISTS services(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,truck_id INTEGER NOT NULL,service_date TEXT NOT NULL,km INTEGER NOT NULL,note TEXT NOT NULL,created_at TEXT NOT NULL)''',
+            '''CREATE TABLE IF NOT EXISTS diagnoses(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,truck_id INTEGER NOT NULL,fault_code TEXT,symptoms TEXT NOT NULL,answer TEXT NOT NULL,created_at TEXT NOT NULL)'''
+        ]
+        for stmt in statements:
+            c.execute(stmt)
+    c.commit(); c.close()
 
 def uid(): return session.get('user_id')
 def guard(): return None if uid() else redirect(url_for('login'))
@@ -65,7 +106,7 @@ def register():
         c=db()
         try:
             c.execute('INSERT INTO users(email,password_hash,created_at) VALUES(?,?,?)',(email,generate_password_hash(password),datetime.utcnow().isoformat())); c.commit()
-        except sqlite3.IntegrityError:
+        except (sqlite3.IntegrityError, psycopg2.IntegrityError):
             c.close(); flash('Der findes allerede en bruger med den e-mail.'); return redirect(url_for('register'))
         user=c.execute('SELECT id FROM users WHERE email=?',(email,)).fetchone(); c.close(); session['user_id']=user['id']; session['email']=email
         return redirect(url_for('index'))
