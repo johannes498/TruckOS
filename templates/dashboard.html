@@ -1,6 +1,154 @@
-{% extends 'base.html' %}{% block content %}<main class="layout"><aside class="sidebar"><button class="nav active" data-view="dashboard">Dashboard</button><button class="nav" data-view="trucks">Mine lastbiler</button><button class="nav" data-view="diagnose">AI Diagnose</button><button class="nav" data-view="service">Servicehistorik</button></aside><section class="content">
-<section id="dashboard" class="view active"><h1>Dashboard</h1><p class="muted">TruckOS v0.2 med login, database og AI-klar diagnose.</p><div class="cards"><div class="card"><span>Lastbiler</span><strong>{{ counts.trucks }}</strong></div><div class="card"><span>Serviceposter</span><strong>{{ counts.services }}</strong></div><div class="card"><span>Diagnoser</span><strong>{{ counts.diagnoses }}</strong></div></div><section class="panel"><h2>Seneste diagnoser</h2>{% for d in diagnoses %}<article class="item"><strong>{{ d.fault_code or 'Ingen kode' }}</strong><small>{{ d.created_at[:16].replace('T',' ') }}</small><p>{{ d.symptoms }}</p></article>{% else %}<p class="muted">Ingen diagnoser endnu.</p>{% endfor %}</section></section>
-<section id="trucks" class="view"><h1>Mine lastbiler</h1><form method="post" action="{{ url_for('add_truck') }}" class="panel stack"><input name="name" placeholder="Fx Scania S770" required><input name="plate" placeholder="Nummerplade" required><input name="km" type="number" min="0" placeholder="Kilometerstand" required><button>Tilføj lastbil</button></form><div class="list">{% for t in trucks %}<article class="item"><strong>{{ t.name }}</strong><small>{{ t.plate }} · {{ t.km }} km</small></article>{% else %}<p class="muted">Ingen lastbiler endnu.</p>{% endfor %}</div></section>
-<section id="diagnose" class="view"><h1>AI Diagnose</h1><p class="muted">Beslutningsstøtte – ikke en garanti for fejlkilden.</p>{% if trucks %}<form id="diagForm" class="panel stack"><select id="diagTruck">{% for t in trucks %}<option value="{{ t.id }}">{{ t.name }} — {{ t.plate }}</option>{% endfor %}</select><input id="faultCode" placeholder="Fejlkode, fx P0299 (valgfri)"><textarea id="symptoms" placeholder="Beskriv symptomerne..." required></textarea><button>Kør diagnose</button></form><section id="diagResult" class="panel hidden"><h2>TruckOS vurdering</h2><pre id="diagText"></pre></section>{% else %}<p>Tilføj først en lastbil.</p>{% endif %}</section>
-<section id="service" class="view"><h1>Servicehistorik</h1>{% if trucks %}<form method="post" action="{{ url_for('add_service') }}" class="panel stack"><select name="truck_id">{% for t in trucks %}<option value="{{ t.id }}">{{ t.name }} — {{ t.plate }}</option>{% endfor %}</select><input name="service_date" type="date" required><input name="km" type="number" min="0" placeholder="Kilometerstand" required><textarea name="note" placeholder="Hvad blev lavet?" required></textarea><button>Gem service</button></form>{% endif %}<div class="list">{% for s in services %}<article class="item"><strong>{{ s.service_date }}</strong><small>{{ s.km }} km</small><p>{{ s.note }}</p></article>{% else %}<p class="muted">Ingen serviceposter endnu.</p>{% endfor %}</div></section>
-</section></main>{% endblock %}
+{% extends 'base.html' %}
+{% block content %}
+<main class="layout">
+  <aside class="sidebar">
+    <button class="nav active" data-view="dashboard">Dashboard</button>
+    <button class="nav" data-view="trucks">Mine lastbiler</button>
+    <button class="nav" data-view="diagnose">AI Diagnose</button>
+    <button class="nav" data-view="service">Servicehistorik</button>
+    <button class="nav" data-view="profile">Profil</button>
+  </aside>
+
+  <section class="content">
+    <section id="dashboard" class="view active">
+      <div class="hero">
+        <div>
+          <div class="eyebrow">OVERSIGT</div>
+          <h1>{{ (profile.display_name if profile and profile.display_name else 'Dashboard') }}</h1>
+          <p class="muted">Din TruckOS-kontrolcentral med lastbiler, service og diagnoser.</p>
+        </div>
+        <div class="status-card">
+          <span class="status-dot {{ 'good' if ai_enabled else 'warn' }}"></span>
+          <div><strong>{{ 'OpenAI aktiv' if ai_enabled else 'Lokal diagnose aktiv' }}</strong><small>{{ ai_model if ai_enabled else 'Tilføj OPENAI_API_KEY for rigtig AI' }}</small></div>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card"><span>Lastbiler</span><strong>{{ counts.trucks }}</strong></div>
+        <div class="card"><span>Serviceposter</span><strong>{{ counts.services }}</strong></div>
+        <div class="card"><span>Diagnoser</span><strong>{{ counts.diagnoses }}</strong></div>
+      </div>
+
+      <div class="grid-2">
+        <section class="panel">
+          <div class="panel-head"><h2>Seneste diagnoser</h2><button class="link-btn" data-go="diagnose">Ny diagnose</button></div>
+          {% for d in diagnoses[:5] %}
+          <article class="item">
+            <div class="item-row"><strong>{{ d.fault_code or 'Ingen kode' }}</strong><span class="badge">{{ d.truck_name }}</span></div>
+            <small>{{ d.created_at[:16].replace('T',' ') }} · {{ d.truck_plate }}</small>
+            <p>{{ d.symptoms }}</p>
+          </article>
+          {% else %}<p class="muted">Ingen diagnoser endnu.</p>{% endfor %}
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>Seneste service</h2><button class="link-btn" data-go="service">Tilføj service</button></div>
+          {% for s in services[:5] %}
+          <article class="item">
+            <div class="item-row"><strong>{{ s.service_date }}</strong><span class="badge">{{ s.truck_name }}</span></div>
+            <small>{{ s.km }} km · {{ s.truck_plate }}</small>
+            <p>{{ s.note }}</p>
+          </article>
+          {% else %}<p class="muted">Ingen serviceposter endnu.</p>{% endfor %}
+        </section>
+      </div>
+    </section>
+
+    <section id="trucks" class="view">
+      <div class="section-title"><div><div class="eyebrow">FLÅDE</div><h1>Mine lastbiler</h1></div></div>
+      <form method="post" action="{{ url_for('add_truck') }}" class="panel form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Navn<input name="name" placeholder="Fx Scania S770" required></label>
+        <label>Nummerplade<input name="plate" placeholder="AB12345" required></label>
+        <label>Kilometerstand<input name="km" type="number" min="0" placeholder="50000" required></label>
+        <button class="span-full">Tilføj lastbil</button>
+      </form>
+
+      <div class="list">
+        {% for t in trucks %}
+        <article class="item truck-item">
+          <div class="item-row"><div><strong>{{ t.name }}</strong><small>{{ t.plate }} · {{ t.km }} km</small></div><button class="secondary toggle-edit" type="button">Rediger</button></div>
+          <form method="post" action="{{ url_for('edit_truck',truck_id=t.id) }}" class="edit-box hidden form-grid">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>Navn<input name="name" value="{{ t.name }}" required></label>
+            <label>Nummerplade<input name="plate" value="{{ t.plate }}" required></label>
+            <label>Kilometerstand<input name="km" type="number" min="0" value="{{ t.km }}" required></label>
+            <button>Gem ændringer</button>
+          </form>
+          <form method="post" action="{{ url_for('delete_truck',truck_id=t.id) }}" class="delete-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="danger" data-confirm="Slet {{ t.name }} og al service-/diagnosehistorik for den?">Slet lastbil</button>
+          </form>
+        </article>
+        {% else %}<p class="muted">Ingen lastbiler endnu.</p>{% endfor %}
+      </div>
+    </section>
+
+    <section id="diagnose" class="view">
+      <div class="section-title"><div><div class="eyebrow">BESLUTNINGSSTØTTE</div><h1>AI Diagnose</h1></div><span class="ai-pill {{ 'on' if ai_enabled else 'off' }}">{{ 'OpenAI' if ai_enabled else 'Lokal fallback' }}</span></div>
+      <p class="muted">TruckOS kan hjælpe med prioritet, sandsynlige årsager og næste kontrolpunkter. Det erstatter ikke en fysisk diagnose.</p>
+      {% if trucks %}
+      <form id="diagForm" class="panel stack">
+        <label>Lastbil<select id="diagTruck">{% for t in trucks %}<option value="{{ t.id }}">{{ t.name }} — {{ t.plate }} — {{ t.km }} km</option>{% endfor %}</select></label>
+        <label>Fejlkode<input id="faultCode" placeholder="Fx P0299 (valgfri)"></label>
+        <label>Symptomer<textarea id="symptoms" placeholder="Beskriv hvad chaufføren oplever, advarselslamper, lyd, krafttab, temperatur osv." required></textarea></label>
+        <button>Kør diagnose</button>
+      </form>
+      <section id="diagResult" class="panel hidden"><div class="panel-head"><h2>TruckOS vurdering</h2><span id="diagMode" class="badge"></span></div><pre id="diagText"></pre></section>
+      {% else %}<p>Tilføj først en lastbil.</p>{% endif %}
+
+      <section class="panel">
+        <h2>Diagnosehistorik</h2>
+        {% for d in diagnoses %}<article class="item"><div class="item-row"><strong>{{ d.fault_code or 'Ingen kode' }}</strong><span class="badge">{{ d.truck_name }}</span></div><small>{{ d.created_at[:16].replace('T',' ') }} · {{ d.truck_plate }}</small><p>{{ d.symptoms }}</p><details><summary>Se vurdering</summary><pre>{{ d.answer }}</pre></details></article>{% else %}<p class="muted">Ingen diagnoser endnu.</p>{% endfor %}
+      </section>
+    </section>
+
+    <section id="service" class="view">
+      <div class="section-title"><div><div class="eyebrow">VEDLIGEHOLD</div><h1>Servicehistorik</h1></div></div>
+      {% if trucks %}
+      <form method="post" action="{{ url_for('add_service') }}" class="panel form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Lastbil<select name="truck_id">{% for t in trucks %}<option value="{{ t.id }}">{{ t.name }} — {{ t.plate }}</option>{% endfor %}</select></label>
+        <label>Dato<input name="service_date" type="date" required></label>
+        <label>Kilometerstand<input name="km" type="number" min="0" placeholder="Kilometerstand" required></label>
+        <label class="span-full">Hvad blev lavet?<textarea name="note" placeholder="Fx olie + filter, bremsekontrol, dæk..." required></textarea></label>
+        <button class="span-full">Gem service</button>
+      </form>
+      {% endif %}
+
+      <div class="list">
+        {% for s in services %}
+        <article class="item service-item">
+          <div class="item-row"><div><strong>{{ s.service_date }} · {{ s.truck_name }}</strong><small>{{ s.truck_plate }} · {{ s.km }} km</small></div><button class="secondary toggle-edit" type="button">Rediger</button></div>
+          <p>{{ s.note }}</p>
+          <form method="post" action="{{ url_for('edit_service',service_id=s.id) }}" class="edit-box hidden form-grid">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>Lastbil<select name="truck_id">{% for t in trucks %}<option value="{{ t.id }}" {% if t.id==s.truck_id %}selected{% endif %}>{{ t.name }} — {{ t.plate }}</option>{% endfor %}</select></label>
+            <label>Dato<input name="service_date" type="date" value="{{ s.service_date }}" required></label>
+            <label>Kilometerstand<input name="km" type="number" min="0" value="{{ s.km }}" required></label>
+            <label class="span-full">Notat<textarea name="note" required>{{ s.note }}</textarea></label>
+            <button>Gem ændringer</button>
+          </form>
+          <form method="post" action="{{ url_for('delete_service',service_id=s.id) }}" class="delete-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="danger" data-confirm="Slet denne servicepost?">Slet servicepost</button>
+          </form>
+        </article>
+        {% else %}<p class="muted">Ingen serviceposter endnu.</p>{% endfor %}
+      </div>
+    </section>
+
+    <section id="profile" class="view">
+      <div class="section-title"><div><div class="eyebrow">KONTO</div><h1>Profil</h1></div></div>
+      <form method="post" action="{{ url_for('update_profile') }}" class="panel stack profile-card">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Navn<input name="display_name" value="{{ profile.display_name if profile else '' }}" placeholder="Dit navn"></label>
+        <label>Firma<input name="company" value="{{ profile.company if profile else '' }}" placeholder="Fx Andersen Transport"></label>
+        <label>E-mail<input value="{{ session.get('email') }}" disabled></label>
+        <button>Gem profil</button>
+      </form>
+      <section class="panel"><h2>TruckOS-status</h2><p><strong>Database:</strong> PostgreSQL når DATABASE_URL er sat på Render.</p><p><strong>AI:</strong> {{ 'OpenAI er aktiv med ' ~ ai_model if ai_enabled else 'Lokal fallback er aktiv. Tilføj OPENAI_API_KEY på Render for rigtig AI.' }}</p></section>
+    </section>
+  </section>
+</main>
+{% endblock %}

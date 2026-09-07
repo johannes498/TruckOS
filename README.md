@@ -1,21 +1,34 @@
-# TruckOS v0.2
+# TruckOS v0.4
 
-Ny prototype med brugerlogin, separate data pr. bruger, lastbiler, servicehistorik og AI-klar diagnose.
+TruckOS v0.4 bygger videre på v0.3 og tilføjer:
 
-## Start på Windows
-1. Installer Python 3.11+.
-2. Åbn PowerShell i mappen.
-3. Kør:
-   `python -m venv .venv`
-   `.venv\Scripts\activate`
-   `pip install -r requirements.txt`
-   `python app.py`
-4. Åbn `http://127.0.0.1:5000`.
+- PostgreSQL via `DATABASE_URL` med SQLite fallback lokalt
+- Rediger og slet lastbiler
+- Rediger og slet serviceposter
+- Forbedret servicehistorik med lastbilnavn og nummerplade
+- Profil med navn og firma
+- Nyt dashboard og mobilvenligt design
+- Diagnosehistorik
+- Rigtig OpenAI-baseret AI Diagnose via Responses API
+- Lokal sikker fallback hvis OpenAI ikke er sat op
+- CSRF-beskyttelse på ændringer
+- `/health` endpoint til Render health checks
 
-## Rigtig AI
-Uden AI-indstillinger bruger TruckOS en lokal fallback. For rigtig AI skal serveren have `OPENAI_API_KEY` og `OPENAI_MODEL` som miljøvariabler. Læg aldrig API-nøglen i HTML eller JavaScript.
+## Render
 
-## Online
-Projektet er klar til almindelig Python-hosting. Produktionskommando: `gunicorn app:app`.
+Build command:
 
-SQLite er fint til test. Før mange kunder bør databasen flyttes til en administreret database med backups og ordentlig sikkerheds-/persondatagennemgang.
+`pip install -r requirements.txt`
+
+Start command:
+
+`gunicorn app:app`
+
+Environment variables:
+
+- `DATABASE_URL` = Render Postgres Internal Database URL
+- `SECRET_KEY` = lang tilfældig hemmelig værdi
+- `OPENAI_API_KEY` = OpenAI API key
+- `OPENAI_MODEL` = `gpt-5.6-luna` (kan ændres)
+
+Gem aldrig API keys eller database-URLs i GitHub.

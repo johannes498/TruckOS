@@ -1,1 +1,26 @@
-<!doctype html><html lang="da"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TruckOS v0.2</title><link rel="stylesheet" href="{{ url_for('static',filename='styles.css') }}"></head><body><header class="topbar"><div><strong>TruckOS</strong><span> v0.2</span></div>{% if session.get('user_id') %}<div class="top-actions"><span>{{ session.get('email') }}</span><a href="{{ url_for('logout') }}">Log ud</a></div>{% endif %}</header>{% with m=get_flashed_messages() %}{% if m %}<div class="flash">{{ m[0] }}</div>{% endif %}{% endwith %}{% block content %}{% endblock %}<footer>TruckOS er beslutningsstøtte. Sikkerhedskritiske fejl skal vurderes efter producentens instruktioner og af kvalificeret fagperson.</footer><script src="{{ url_for('static',filename='app.js') }}"></script></body></html>
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>TruckOS v0.4</title>
+  <link rel="stylesheet" href="{{ url_for('static',filename='styles.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="{{ url_for('index') }}"><strong>TruckOS</strong><span> v0.4</span></a>
+  {% if session.get('user_id') %}
+  <div class="top-actions">
+    <span class="ai-pill {{ 'on' if ai_enabled else 'off' }}">AI {{ 'aktiv' if ai_enabled else 'lokal' }}</span>
+    <span class="email">{{ session.get('email') }}</span>
+    <a href="{{ url_for('logout') }}">Log ud</a>
+  </div>
+  {% endif %}
+</header>
+{% with m=get_flashed_messages() %}{% if m %}<div class="flash">{{ m[0] }}</div>{% endif %}{% endwith %}
+{% block content %}{% endblock %}
+<footer>TruckOS er beslutningsstøtte. Sikkerhedskritiske fejl skal vurderes efter producentens instruktioner og af kvalificeret fagperson.</footer>
+<script src="{{ url_for('static',filename='app.js') }}"></script>
+</body>
+</html>

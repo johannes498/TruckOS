@@ -1,1 +1,17 @@
-{% extends 'base.html' %}{% block content %}<main class="auth-wrap"><section class="auth-card"><h1>{{ 'Opret TruckOS-konto' if mode=='register' else 'Log ind på TruckOS' }}</h1><form method="post" class="stack"><input type="email" name="email" placeholder="E-mail" required><input type="password" name="password" placeholder="Adgangskode (min. 8 tegn)" required><button>{{ 'Opret konto' if mode=='register' else 'Log ind' }}</button></form><p>{% if mode=='register' %}Har du allerede en konto? <a href="{{ url_for('login') }}">Log ind</a>{% else %}Ny bruger? <a href="{{ url_for('register') }}">Opret konto</a>{% endif %}</p></section></main>{% endblock %}
+{% extends 'base.html' %}
+{% block content %}
+<main class="auth-wrap">
+  <section class="auth-card">
+    <div class="eyebrow">TruckOS</div>
+    <h1>{{ 'Opret konto' if mode=='register' else 'Velkommen tilbage' }}</h1>
+    <p class="muted">Lastbiler, servicehistorik og AI-baseret beslutningsstøtte samlet ét sted.</p>
+    <form method="post" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>E-mail<input type="email" name="email" placeholder="navn@email.dk" required></label>
+      <label>Adgangskode<input type="password" name="password" placeholder="Mindst 8 tegn" required></label>
+      <button>{{ 'Opret TruckOS-konto' if mode=='register' else 'Log ind' }}</button>
+    </form>
+    <p>{% if mode=='register' %}Har du allerede en konto? <a href="{{ url_for('login') }}">Log ind</a>{% else %}Ny bruger? <a href="{{ url_for('register') }}">Opret konto</a>{% endif %}</p>
+  </section>
+</main>
+{% endblock %}
