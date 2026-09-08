@@ -23,12 +23,12 @@ app.config.update(
 DATABASE_URL = os.getenv("DATABASE_URL")
 DB_PATH = os.getenv("DATABASE_PATH", "truckos.db")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
-APP_VERSION = "0.6"
+APP_VERSION = "1.0"
 
 PLAN_INFO = {
     "driver": {"name": "Chauffør", "price_dkk": 79, "price_env": "STRIPE_PRICE_DRIVER", "features": ["1 chaufførkonto", "AI-diagnose", "Servicehistorik", "Påmindelser"]},
     "pro": {"name": "Vognmand Pro", "price_dkk": 199, "price_env": "STRIPE_PRICE_PRO", "features": ["Alt i Chauffør", "Flere lastbiler", "Prioriteret overblik", "Fuld historik"]},
-    "fleet": {"name": "Flåde", "price_dkk": 499, "price_env": "STRIPE_PRICE_FLEET", "features": ["Alt i Pro", "Flådeoverblik", "Flere brugere senere", "Prioriteret support"]},
+    "fleet": {"name": "Flåde", "price_dkk": 499, "price_env": "STRIPE_PRICE_FLEET", "features": ["Alt i Pro", "Flådeoverblik", "Reparationsflow", "Prioriteret support"]},
 }
 
 
@@ -219,6 +219,8 @@ def init_db():
     ensure_column(c, "trucks", "year", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(c, "trucks", "vin", "TEXT NOT NULL DEFAULT ''")
     ensure_column(c, "trucks", "engine", "TEXT NOT NULL DEFAULT ''")
+    ensure_column(c, "trucks", "registration_country", "TEXT NOT NULL DEFAULT 'DK'")
+    ensure_column(c, "trucks", "fuel", "TEXT NOT NULL DEFAULT ''")
     c.commit()
     c.close()
 
@@ -264,6 +266,7 @@ def inject_globals():
         "stripe_ready": stripe_ready(),
         "plans": PLAN_INFO,
         "subscription": sub,
+        "integration_status": {k: integration_ready(k) for k in INTEGRATIONS},
     }
 
 
@@ -318,8 +321,8 @@ def ai_answer(truck, symptoms, code):
         )
         prompt = (
             f"Lastbil: {truck['name']}\nMærke/model: {truck['make']} {truck['model']}\n"
-            f"Nummerplade: {truck['plate']}\nKilometerstand: {truck['km']}\n"
-            f"Fejlkode: {code or 'ingen oplyst'}\nSymptomer: {symptoms}"
+            f"Nummerplade: {truck['plate']}\nVIN: {truck['vin'] or 'ikke oplyst'}\nMotor: {truck['engine'] or 'ikke oplyst'}\n"
+            f"Kilometerstand: {truck['km']}\nFejlkode: {code or 'ingen oplyst'}\nSymptomer: {symptoms}"
         )
         response = client.responses.create(model=OPENAI_MODEL, instructions=instructions, input=prompt)
         text = getattr(response, "output_text", "").strip()
@@ -373,15 +376,37 @@ def index():
     ).fetchall()
     profile = c.execute("SELECT * FROM profiles WHERE user_id=?", (u,)).fetchone()
     sub = subscription_for_user(c, u)
+    cases = c.execute(
+        """SELECT repair_cases.*, trucks.name AS truck_name, trucks.plate AS truck_plate, diagnoses.fault_code AS fault_code
+           FROM repair_cases JOIN trucks ON trucks.id=repair_cases.truck_id
+           JOIN diagnoses ON diagnoses.id=repair_cases.diagnosis_id
+           WHERE repair_cases.user_id=? ORDER BY repair_cases.id DESC LIMIT 50""", (u,)
+    ).fetchall()
+    parts = c.execute(
+        """SELECT part_options.* FROM part_options WHERE user_id=? ORDER BY id DESC LIMIT 100""", (u,)
+    ).fetchall()
+    workshop_requests = c.execute(
+        """SELECT workshop_requests.*, repair_cases.truck_id, trucks.name AS truck_name
+           FROM workshop_requests JOIN repair_cases ON repair_cases.id=workshop_requests.case_id
+           JOIN trucks ON trucks.id=repair_cases.truck_id WHERE workshop_requests.user_id=?
+           ORDER BY workshop_requests.id DESC LIMIT 50""", (u,)
+    ).fetchall()
+    assistance_requests = c.execute(
+        """SELECT assistance_requests.*, trucks.name AS truck_name FROM assistance_requests
+           JOIN trucks ON trucks.id=assistance_requests.truck_id WHERE assistance_requests.user_id=?
+           ORDER BY assistance_requests.id DESC LIMIT 50""", (u,)
+    ).fetchall()
     counts = {
         "trucks": c.execute("SELECT COUNT(*) FROM trucks WHERE user_id=?", (u,)).fetchone()[0],
         "services": c.execute("SELECT COUNT(*) FROM services WHERE user_id=?", (u,)).fetchone()[0],
         "diagnoses": c.execute("SELECT COUNT(*) FROM diagnoses WHERE user_id=?", (u,)).fetchone()[0],
         "reminders": c.execute("SELECT COUNT(*) FROM reminders WHERE user_id=? AND done=0", (u,)).fetchone()[0],
+        "cases": c.execute("SELECT COUNT(*) FROM repair_cases WHERE user_id=? AND status!='closed'", (u,)).fetchone()[0],
     }
     c.close()
     return render_template("dashboard.html", trucks=trucks, services=services, diagnoses=diagnoses,
-                           reminders=reminders, counts=counts, profile=profile, subscription=sub)
+                           reminders=reminders, counts=counts, profile=profile, subscription=sub,
+                           cases=cases, parts=parts, workshop_requests=workshop_requests, assistance_requests=assistance_requests)
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -445,9 +470,10 @@ def add_truck():
     name = request.form["name"].strip()[:120]; plate = request.form["plate"].strip().upper()[:30]
     if not name or not plate: flash("Navn og nummerplade skal udfyldes."); return redirect(url_for("index") + "#trucks")
     c = db(); c.execute(
-        "INSERT INTO trucks(user_id,name,plate,km,make,model,year,vin,engine,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO trucks(user_id,name,plate,km,make,model,year,vin,engine,registration_country,fuel,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
         (uid(), name, plate, km, request.form.get("make", "").strip()[:80], request.form.get("model", "").strip()[:80], year,
-         request.form.get("vin", "").strip().upper()[:40], request.form.get("engine", "").strip()[:120], now_iso()))
+         request.form.get("vin", "").strip().upper()[:40], request.form.get("engine", "").strip()[:120],
+         request.form.get("registration_country", "DK").strip().upper()[:8], request.form.get("fuel", "").strip()[:40], now_iso()))
     c.commit(); c.close(); flash("Lastbil tilføjet."); return redirect(url_for("index") + "#trucks")
 
 
@@ -459,10 +485,11 @@ def edit_truck(truck_id):
     if not truck: c.close(); abort(404)
     try: km = max(0, int(request.form["km"])); year = max(0, int(request.form.get("year") or 0))
     except ValueError: c.close(); flash("Kilometerstand og årgang skal være tal."); return redirect(url_for("index") + "#trucks")
-    c.execute("UPDATE trucks SET name=?, plate=?, km=?, make=?, model=?, year=?, vin=?, engine=? WHERE id=? AND user_id=?",
+    c.execute("UPDATE trucks SET name=?, plate=?, km=?, make=?, model=?, year=?, vin=?, engine=?, registration_country=?, fuel=? WHERE id=? AND user_id=?",
               (request.form["name"].strip()[:120], request.form["plate"].strip().upper()[:30], km,
                request.form.get("make", "").strip()[:80], request.form.get("model", "").strip()[:80], year,
-               request.form.get("vin", "").strip().upper()[:40], request.form.get("engine", "").strip()[:120], truck_id, uid()))
+               request.form.get("vin", "").strip().upper()[:40], request.form.get("engine", "").strip()[:120],
+               request.form.get("registration_country", "DK").strip().upper()[:8], request.form.get("fuel", "").strip()[:40], truck_id, uid()))
     c.commit(); c.close(); flash("Lastbil opdateret."); return redirect(url_for("index") + "#trucks")
 
 
@@ -561,7 +588,94 @@ def diagnose():
     answer = ai_answer(truck, symptoms, code)
     c.execute("INSERT INTO diagnoses(user_id,truck_id,fault_code,symptoms,answer,created_at) VALUES(?,?,?,?,?,?)",
               (uid(), tid, code, symptoms, answer, now_iso()))
-    c.commit(); c.close(); return jsonify({"answer": answer, "ai": bool(os.getenv("OPENAI_API_KEY"))})
+    c.commit()
+    row = c.execute("SELECT id FROM diagnoses WHERE user_id=? AND truck_id=? ORDER BY id DESC LIMIT 1", (uid(), tid)).fetchone()
+    diagnosis_id = row["id"] if row else 0
+    c.close(); return jsonify({"answer": answer, "ai": bool(os.getenv("OPENAI_API_KEY")), "diagnosis_id": diagnosis_id})
+
+
+def likely_part_for(code, symptoms):
+    text = f"{code} {symptoms}".lower()
+    if any(x in text for x in ["p0299", "turbo", "boost", "ladetryk"]):
+        return "Ladetrykssystem / turboslange / intercooler / sensor"
+    if any(x in text for x in ["bremse", "brake"]):
+        return "Bremsesystem – kræver faglig kontrol før del vælges"
+    if any(x in text for x in ["adblue", "scr", "nox"]):
+        return "SCR/AdBlue-system / NOx-sensor"
+    if any(x in text for x in ["dpf", "partikelfilter"]):
+        return "DPF/udstødningssystem"
+    return "Del skal identificeres ud fra VIN/OEM-nummer og værkstedsdiagnose"
+
+@app.route("/solutions/<int:diagnosis_id>", methods=["POST"])
+def create_solution(diagnosis_id):
+    g = guard()
+    if g: return g
+    check_csrf(); c = db()
+    d = c.execute("SELECT * FROM diagnoses WHERE id=? AND user_id=?", (diagnosis_id, uid())).fetchone()
+    if not d: c.close(); abort(404)
+    existing = c.execute("SELECT id FROM repair_cases WHERE diagnosis_id=? AND user_id=?", (diagnosis_id, uid())).fetchone()
+    if existing:
+        c.close(); flash("Der findes allerede en løsning til diagnosen."); return redirect(url_for("index") + "#solutions")
+    likely = likely_part_for(d["fault_code"], d["symptoms"])
+    c.execute("INSERT INTO repair_cases(user_id,truck_id,diagnosis_id,status,priority,likely_part,part_number,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+              (uid(), d["truck_id"], diagnosis_id, "open", "review", likely, "", "Bekræft del via VIN/OEM-data før bestilling.", now_iso(), now_iso()))
+    c.commit(); c.close(); flash("Løsningsforløb oprettet. Nu kan du samle del, værksted og vejhjælp samme sted.")
+    return redirect(url_for("index") + "#solutions")
+
+@app.route("/parts/<int:case_id>/add", methods=["POST"])
+def add_part_option(case_id):
+    g = guard()
+    if g: return g
+    check_csrf(); c = db()
+    case = c.execute("SELECT * FROM repair_cases WHERE id=? AND user_id=?", (case_id, uid())).fetchone()
+    if not case: c.close(); abort(404)
+    c.execute("INSERT INTO part_options(user_id,case_id,supplier_name,country,part_number,description,price_text,stock_status,eta_text,source_url,verified,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+              (uid(), case_id, request.form.get("supplier_name", "").strip()[:120], request.form.get("country", "").strip().upper()[:8],
+               request.form.get("part_number", "").strip().upper()[:100], request.form.get("description", "").strip()[:500],
+               request.form.get("price_text", "").strip()[:80], request.form.get("stock_status", "unknown").strip()[:40],
+               request.form.get("eta_text", "").strip()[:100], request.form.get("source_url", "").strip()[:500], 0, now_iso()))
+    c.commit(); c.close(); flash("Reservedelsmulighed gemt. Pris/lager står som ikke-verificeret, indtil en rigtig leverandørintegration bekræfter det.")
+    return redirect(url_for("index") + "#solutions")
+
+@app.route("/workshops/request", methods=["POST"])
+def workshop_request():
+    g = guard()
+    if g: return g
+    check_csrf(); case_id = int(request.form["case_id"]); c = db()
+    case = c.execute("SELECT * FROM repair_cases WHERE id=? AND user_id=?", (case_id, uid())).fetchone()
+    if not case: c.close(); abort(404)
+    status = "pending" if integration_ready("workshops") else "draft"
+    c.execute("INSERT INTO workshop_requests(user_id,case_id,workshop_name,city,requested_time,status,contact,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+              (uid(), case_id, request.form.get("workshop_name", "").strip()[:140], request.form.get("city", "").strip()[:100],
+               request.form.get("requested_time", "").strip()[:40], status, request.form.get("contact", "").strip()[:180],
+               request.form.get("note", "").strip()[:1000], now_iso(), now_iso()))
+    c.commit(); c.close()
+    flash("Bookingforespørgsel gemt." if status == "draft" else "Bookingforespørgsel sendt til den konfigurerede integration.")
+    return redirect(url_for("index") + "#workshops")
+
+@app.route("/assistance", methods=["POST"])
+def assistance_request():
+    g = guard()
+    if g: return g
+    check_csrf(); truck_id = int(request.form["truck_id"]); c = db()
+    if not truck_for_user(c, truck_id): c.close(); abort(404)
+    status = "pending" if integration_ready("roadside") else "draft"
+    c.execute("INSERT INTO assistance_requests(user_id,truck_id,case_id,provider,location_text,status,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+              (uid(), truck_id, int(request.form.get("case_id") or 0), request.form.get("provider", "").strip()[:120],
+               request.form.get("location_text", "").strip()[:250], status, request.form.get("note", "").strip()[:1000], now_iso(), now_iso()))
+    c.commit(); c.close(); flash("Vejhjælpssag gemt. Ring altid 112 ved akut fare.")
+    return redirect(url_for("index") + "#assistance")
+
+@app.route("/cases/<int:case_id>/status", methods=["POST"])
+def update_case_status(case_id):
+    g = guard()
+    if g: return g
+    check_csrf(); status = request.form.get("status", "open")
+    if status not in {"open", "part_found", "workshop_pending", "booked", "repaired", "closed"}: status = "open"
+    c = db(); row = c.execute("SELECT id FROM repair_cases WHERE id=? AND user_id=?", (case_id, uid())).fetchone()
+    if not row: c.close(); abort(404)
+    c.execute("UPDATE repair_cases SET status=?, updated_at=? WHERE id=? AND user_id=?", (status, now_iso(), case_id, uid()))
+    c.commit(); c.close(); flash("Status opdateret."); return redirect(url_for("index") + "#solutions")
 
 
 def upsert_subscription(user_id, plan, status, customer_id="", subscription_id="", period_end=""):
@@ -649,6 +763,14 @@ def stripe_webhook():
         status = obj.get("status") or "inactive"; period_end = str(obj.get("current_period_end") or "")
         if user_id:
             upsert_subscription(user_id, plan, status, obj.get("customer") or "", obj.get("id") or "", period_end)
+    elif event["type"] in {"invoice.payment_failed", "invoice.payment_action_required"}:
+        customer = obj.get("customer") or ""; subscription_id = obj.get("subscription") or ""
+        c = db(); sub = c.execute("SELECT * FROM subscriptions WHERE stripe_customer_id=? OR stripe_subscription_id=? LIMIT 1", (customer, subscription_id)).fetchone(); c.close()
+        if sub: upsert_subscription(sub["user_id"], sub["plan"], "past_due", customer, subscription_id, sub["current_period_end"])
+    elif event["type"] == "invoice.paid":
+        customer = obj.get("customer") or ""; subscription_id = obj.get("subscription") or ""
+        c = db(); sub = c.execute("SELECT * FROM subscriptions WHERE stripe_customer_id=? OR stripe_subscription_id=? LIMIT 1", (customer, subscription_id)).fetchone(); c.close()
+        if sub: upsert_subscription(sub["user_id"], sub["plan"], "active", customer, subscription_id, sub["current_period_end"])
     return "ok", 200
 
 

@@ -1,23 +1,20 @@
-# TruckOS v0.6
+# TruckOS 1.0
 
-TruckOS v0.6 samler den eksisterende v0.4 og bygger videre uden at slette eksisterende PostgreSQL-data.
+TruckOS 1.0 samler lastbilprofil, AI-fejlvurdering, reparationssager, reservedelsflow, værkstedsbooking, vejhjælp, service, påmindelser og Stripe-abonnementer.
 
-## Nyt i v0.6
-- Enklere dashboard med store knapper
-- Udvidede lastbilprofiler: mærke, model, årgang, VIN og motor
-- Servicepåmindelser med dato og/eller kilometer
-- Bedre AI-diagnosevisning
-- Abonnements-side med Stripe Checkout-integration
-- Stripe webhook + kundeportal-fundament
-- PWA/manifest/service worker + app-ikoner
-- SEO meta-tags
-- `/health` viser også version 0.6
+## Vigtigt om live data
+TruckOS opfinder ikke live lagerstatus, priser eller ledige værkstedstider. Uden en rigtig partnerintegration gemmes reservedels-, booking- og vejhjælpsdata som kladder/ikke-verificerede oplysninger. Når partner-API'er foreligger, kan de kobles på via integrationlaget.
 
-## Vigtigt om betaling
-Koden er klar til Stripe, men rigtige betalinger starter først når disse miljøvariabler er sat på Render:
-`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_DRIVER`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_FLEET`.
+## Miljøvariabler
+Eksisterende: `SECRET_KEY`, `DATABASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_DRIVER`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_FLEET`.
 
-Start med Stripe test mode, og gå først live når checkout, webhook, opsigelse og adgang er testet.
+Nye integrationer: `PARTS_API_URL`, `PARTS_API_KEY`, `WORKSHOP_API_URL`, `WORKSHOP_API_KEY`, `ROADSIDE_API_URL`, `ROADSIDE_API_KEY`.
+
+## Datamigrering
+1.0-opgraderingen er additiv: eksisterende brugere, lastbiler, servicehistorik, diagnoser, påmindelser og abonnementer slettes ikke. Nye tabeller oprettes automatisk ved opstart.
+
+## Stripe
+Webhook-endpoint er `/stripe/webhook`. 1.0 håndterer checkout, subscription created/updated/deleted samt invoice paid/payment failed/action required.
 
 ## Render
 Build: `pip install -r requirements.txt`
