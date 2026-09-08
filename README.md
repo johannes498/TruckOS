@@ -1,34 +1,24 @@
-# TruckOS v0.4
+# TruckOS v0.6
 
-TruckOS v0.4 bygger videre på v0.3 og tilføjer:
+TruckOS v0.6 samler den eksisterende v0.4 og bygger videre uden at slette eksisterende PostgreSQL-data.
 
-- PostgreSQL via `DATABASE_URL` med SQLite fallback lokalt
-- Rediger og slet lastbiler
-- Rediger og slet serviceposter
-- Forbedret servicehistorik med lastbilnavn og nummerplade
-- Profil med navn og firma
-- Nyt dashboard og mobilvenligt design
-- Diagnosehistorik
-- Rigtig OpenAI-baseret AI Diagnose via Responses API
-- Lokal sikker fallback hvis OpenAI ikke er sat op
-- CSRF-beskyttelse på ændringer
-- `/health` endpoint til Render health checks
+## Nyt i v0.6
+- Enklere dashboard med store knapper
+- Udvidede lastbilprofiler: mærke, model, årgang, VIN og motor
+- Servicepåmindelser med dato og/eller kilometer
+- Bedre AI-diagnosevisning
+- Abonnements-side med Stripe Checkout-integration
+- Stripe webhook + kundeportal-fundament
+- PWA/manifest/service worker + app-ikoner
+- SEO meta-tags
+- `/health` viser også version 0.6
+
+## Vigtigt om betaling
+Koden er klar til Stripe, men rigtige betalinger starter først når disse miljøvariabler er sat på Render:
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_DRIVER`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_FLEET`.
+
+Start med Stripe test mode, og gå først live når checkout, webhook, opsigelse og adgang er testet.
 
 ## Render
-
-Build command:
-
-`pip install -r requirements.txt`
-
-Start command:
-
-`gunicorn app:app`
-
-Environment variables:
-
-- `DATABASE_URL` = Render Postgres Internal Database URL
-- `SECRET_KEY` = lang tilfældig hemmelig værdi
-- `OPENAI_API_KEY` = OpenAI API key
-- `OPENAI_MODEL` = `gpt-5.6-luna` (kan ændres)
-
-Gem aldrig API keys eller database-URLs i GitHub.
+Build: `pip install -r requirements.txt`
+Start: `gunicorn app:app`

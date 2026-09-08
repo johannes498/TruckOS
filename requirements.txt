@@ -1,5 +1,6 @@
 Flask>=3.0,<4
 Werkzeug>=3.0,<4
 openai>=2.0,<3
-gunicorn>=22.0
+gunicorn>=23,<24
 psycopg2-binary>=2.9,<3
+stripe>=11,<14
