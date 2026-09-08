@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<main class="download-page">
+  <section class="hero panel">
+    <div>
+      <div class="eyebrow">TRUCKOS 1.0</div>
+      <h1>TruckOS på din telefon</h1>
+      <p class="muted">Brug TruckOS på iPhone og Android. Web-appen kan installeres fra browseren nu; officielle App Store- og Google Play-links aktiveres, når appsene er publiceret.</p>
+    </div>
+  </section>
+  <div class="pricing">
+    <article class="price-card">
+      <div class="eyebrow">IPHONE / IOS</div>
+      <h2>Download til iPhone</h2>
+      {% if app_store_url %}<a class="button-link" href="{{ app_store_url }}" rel="noopener"> Hent i App Store</a>{% else %}<button disabled> App Store – kommer ved publicering</button>{% endif %}
+      <p class="muted">Indtil da: Åbn TruckOS i Safari → Del → Føj til hjemmeskærm.</p>
+    </article>
+    <article class="price-card">
+      <div class="eyebrow">ANDROID</div>
+      <h2>Download til Android</h2>
+      {% if play_store_url %}<a class="button-link" href="{{ play_store_url }}" rel="noopener">▶ Hent på Google Play</a>{% else %}<button disabled>▶ Google Play – kommer ved publicering</button>{% endif %}
+      <p class="muted">Indtil da: Åbn TruckOS i Chrome og vælg Installer app / Føj til startskærm.</p>
+    </article>
+  </div>
+</main>
+{% endblock %}

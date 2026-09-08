@@ -31,6 +31,18 @@ PLAN_INFO = {
     "fleet": {"name": "Flåde", "price_dkk": 499, "price_env": "STRIPE_PRICE_FLEET", "features": ["Alt i Pro", "Flådeoverblik", "Reparationsflow", "Prioriteret support"]},
 }
 
+# External partner integrations are deliberately OFF until real credentials are configured.
+# This prevents TruckOS from inventing stock, prices, booking slots or roadside status.
+INTEGRATIONS = {
+    "parts": ("PARTS_API_URL", "PARTS_API_KEY"),
+    "workshops": ("WORKSHOP_API_URL", "WORKSHOP_API_KEY"),
+    "roadside": ("ROADSIDE_API_URL", "ROADSIDE_API_KEY"),
+}
+
+def integration_ready(name):
+    required = INTEGRATIONS.get(name, ())
+    return bool(required) and all(os.getenv(key) for key in required)
+
 
 class DB:
     def __init__(self):
@@ -138,6 +150,59 @@ def init_db():
                 done INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )""",
+            """CREATE TABLE IF NOT EXISTS repair_cases(
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                truck_id INTEGER NOT NULL,
+                diagnosis_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
+                priority TEXT NOT NULL DEFAULT 'review',
+                likely_part TEXT NOT NULL DEFAULT '',
+                part_number TEXT NOT NULL DEFAULT '',
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS part_options(
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                case_id INTEGER NOT NULL,
+                supplier_name TEXT NOT NULL DEFAULT '',
+                country TEXT NOT NULL DEFAULT '',
+                part_number TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                price_text TEXT NOT NULL DEFAULT '',
+                stock_status TEXT NOT NULL DEFAULT 'unknown',
+                eta_text TEXT NOT NULL DEFAULT '',
+                source_url TEXT NOT NULL DEFAULT '',
+                verified INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS workshop_requests(
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                case_id INTEGER NOT NULL,
+                workshop_name TEXT NOT NULL DEFAULT '',
+                city TEXT NOT NULL DEFAULT '',
+                requested_time TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft',
+                contact TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS assistance_requests(
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                truck_id INTEGER NOT NULL,
+                case_id INTEGER NOT NULL DEFAULT 0,
+                provider TEXT NOT NULL DEFAULT '',
+                location_text TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft',
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )""",
             """CREATE TABLE IF NOT EXISTS subscriptions(
                 user_id INTEGER PRIMARY KEY,
                 plan TEXT NOT NULL DEFAULT 'free',
@@ -200,6 +265,59 @@ def init_db():
                 done INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )""",
+            """CREATE TABLE IF NOT EXISTS repair_cases(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                truck_id INTEGER NOT NULL,
+                diagnosis_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
+                priority TEXT NOT NULL DEFAULT 'review',
+                likely_part TEXT NOT NULL DEFAULT '',
+                part_number TEXT NOT NULL DEFAULT '',
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS part_options(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                case_id INTEGER NOT NULL,
+                supplier_name TEXT NOT NULL DEFAULT '',
+                country TEXT NOT NULL DEFAULT '',
+                part_number TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                price_text TEXT NOT NULL DEFAULT '',
+                stock_status TEXT NOT NULL DEFAULT 'unknown',
+                eta_text TEXT NOT NULL DEFAULT '',
+                source_url TEXT NOT NULL DEFAULT '',
+                verified INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS workshop_requests(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                case_id INTEGER NOT NULL,
+                workshop_name TEXT NOT NULL DEFAULT '',
+                city TEXT NOT NULL DEFAULT '',
+                requested_time TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft',
+                contact TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS assistance_requests(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                truck_id INTEGER NOT NULL,
+                case_id INTEGER NOT NULL DEFAULT 0,
+                provider TEXT NOT NULL DEFAULT '',
+                location_text TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft',
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )""",
             """CREATE TABLE IF NOT EXISTS subscriptions(
                 user_id INTEGER PRIMARY KEY,
                 plan TEXT NOT NULL DEFAULT 'free',
@@ -212,6 +330,13 @@ def init_db():
         ]
     for stmt in statements:
         c.execute(stmt)
+
+    # Helpful indexes for the 1.0 workflow. Safe to run repeatedly.
+    c.execute("CREATE INDEX IF NOT EXISTS idx_repair_cases_user ON repair_cases(user_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_repair_cases_diagnosis ON repair_cases(diagnosis_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_part_options_case ON part_options(case_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_workshop_requests_case ON workshop_requests(case_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_assistance_requests_truck ON assistance_requests(truck_id)")
 
     # Safe schema upgrades from v0.4 without deleting existing data.
     ensure_column(c, "trucks", "make", "TEXT NOT NULL DEFAULT ''")
@@ -267,6 +392,8 @@ def inject_globals():
         "plans": PLAN_INFO,
         "subscription": sub,
         "integration_status": {k: integration_ready(k) for k in INTEGRATIONS},
+        "app_store_url": os.getenv("APP_STORE_URL", ""),
+        "play_store_url": os.getenv("PLAY_STORE_URL", ""),
     }
 
 
@@ -338,6 +465,11 @@ def health():
         return jsonify({"ok": True, "database": "postgres" if DATABASE_URL else "sqlite", "version": APP_VERSION})
     except Exception:
         return jsonify({"ok": False, "version": APP_VERSION}), 503
+
+
+@app.route("/download")
+def download_app():
+    return render_template("download.html")
 
 
 @app.route("/manifest.json")

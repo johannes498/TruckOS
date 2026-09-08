@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#07101f">
   <meta name="csrf-token" content="{{ csrf_token }}">
-  <meta name="description" content="TruckOS hjælper lastbilchauffører og vognmænd med lastbiler, servicehistorik, påmindelser og AI-baseret fejldiagnose.">
+  <meta name="description" content="TruckOS 1.0 hjælper lastbilchauffører og vognmænd med AI-fejlvurdering, service, påmindelser, reparationsflow, reservedels- og værkstedsflow. Brug på iPhone og Android.">
   <meta name="robots" content="index, follow">
-  <title>TruckOS v{{ app_version }}</title>
+  <title>TruckOS {{ app_version }} – AI, service og lastbiloverblik</title>
   <link rel="icon" type="image/png" href="{{ url_for('static',filename='truckos-logo.png') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static',filename='icon-192.png') }}">
   <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="{{ url_for('static',filename='styles.css') }}">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"TruckOS","applicationCategory":"BusinessApplication","operatingSystem":"iOS, Android, Web","url":"{{ request.url_root }}","description":"TruckOS til lastbilchauffører og vognmænd med AI-fejlvurdering, service, påmindelser og reparationsflow."}</script>
 </head>
 <body>
 <header class="topbar">
@@ -21,8 +22,11 @@
     <span class="plan-pill">{{ (subscription.plan|upper) if subscription and subscription.status in ['active','trialing'] else 'BETA' }}</span>
     <span class="ai-pill {{ 'on' if ai_enabled else 'off' }}">AI {{ 'aktiv' if ai_enabled else 'lokal' }}</span>
     <span class="email">{{ session.get('email') }}</span>
+    <a href="{{ url_for('download_app') }}">Download app</a>
     <a href="{{ url_for('logout') }}">Log ud</a>
   </div>
+  {% else %}
+  <div class="top-actions"><a href="{{ url_for('download_app') }}">Download iOS / Android</a></div>
   {% endif %}
 </header>
 {% with m=get_flashed_messages() %}{% if m %}<div class="flash">{{ m[0] }}</div>{% endif %}{% endwith %}
