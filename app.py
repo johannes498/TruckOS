@@ -24,7 +24,17 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 DB_PATH = os.getenv("DATABASE_PATH", "truckos.db")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
 APP_VERSION = "2.0"
+INTEGRATIONS = {
+    "parts": ("PARTS_API_URL", "PARTS_API_KEY"),
+    "workshops": ("WORKSHOP_API_URL", "WORKSHOP_API_KEY"),
+    "roadside": ("ROADSIDE_API_URL", "ROADSIDE_API_KEY"),
+}
 
+def integration_ready(kind):
+    required = INTEGRATIONS.get(kind)
+    if not required:
+        return False
+    return all(os.getenv(name) for name in required)
 PLAN_INFO = {
     "driver": {"name": "Chauffør", "price_dkk": 79, "price_env": "STRIPE_PRICE_DRIVER", "features": ["1 chaufførkonto", "AI-diagnose", "Servicehistorik", "Påmindelser"]},
     "pro": {"name": "Vognmand Pro", "price_dkk": 199, "price_env": "STRIPE_PRICE_PRO", "features": ["Alt i Chauffør", "Flere lastbiler", "Prioriteret overblik", "Fuld historik"]},
