@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block content %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="stylesheet" href="{{ url_for('truckos_v2.static', filename='road.css') }}">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<div class="road-shell" data-csrf="{{ csrf_token }}">
+  <header class="road-head"><div><div class="eyebrow">TRUCKOS 2.0</div><h1>🗺️ På vejen</h1><p>GPS, TruckOS AI, parkering, brændstof, ladning, vask og værksteder.</p></div><a class="back" href="/">← Dashboard</a></header>
+  <section class="assistant-card"><div class="voice-row"><button id="mic" class="mic" aria-label="Tal til TruckOS">🎤</button><input id="roadQuery" placeholder="Fx: Find et sted til 12 timers hvil med bad og mad"><button id="ask">Søg</button></div><div id="aiStatus" class="muted">Tillad GPS og mikrofon, når telefonen spørger.</div></section>
+  <div class="road-grid"><div><div id="map"></div><div class="filters"><button data-q="truckparkering">🅿️ Parkering</button><button data-q="diesel AdBlue">⛽ Brændstof</button><button data-q="ladestander">⚡ Ladning</button><button data-q="lastbilvask">🚿 Vask</button><button data-q="værksted">🔧 Værksted</button></div><div id="results"></div></div>
+  <aside><section class="panel"><h2>💳 Mine brændstofkort</h2><select id="network">{% for n in fuel_networks %}<option>{{n}}</option>{% endfor %}</select><button id="addCard">Tilføj kort</button><div id="cards">{% for c in cards %}<div class="card-pill" data-id="{{c.id}}">{{c.network}} <button class="remove-card">×</button></div>{% endfor %}</div><small>TruckOS prioriterer mærkematch, men påstår ikke kortaccept før den er verificeret.</small></section>
+  <section class="panel"><h2>🔌 Live-data</h2><p>Parkering: <b>vises kun når verificeret</b></p><p>Priser: <b>vises kun når verificeret</b></p><p>Falck/SOS: <b>kladde indtil partnerintegration</b></p></section></aside></div>
+</div><script src="{{ url_for('truckos_v2.static', filename='road.js') }}"></script>
+{% endblock %}

@@ -19,9 +19,3 @@ Webhook-endpoint er `/stripe/webhook`. 1.0 håndterer checkout, subscription cre
 ## Render
 Build: `pip install -r requirements.txt`
 Start: `gunicorn app:app`
-
-## 1.0 database upgrade
-On startup TruckOS safely creates the new 1.0 workflow tables (`repair_cases`, `part_options`, `workshop_requests`, `assistance_requests`) with `CREATE TABLE IF NOT EXISTS`, so existing users, trucks, diagnoses, service history and subscriptions are preserved.
-
-## Mobile download page
-`/download` provides iPhone/iOS and Android install guidance. Official store buttons activate when `APP_STORE_URL` and `PLAY_STORE_URL` are configured after publication.

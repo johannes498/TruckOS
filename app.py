@@ -23,25 +23,13 @@ app.config.update(
 DATABASE_URL = os.getenv("DATABASE_URL")
 DB_PATH = os.getenv("DATABASE_PATH", "truckos.db")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
-APP_VERSION = "1.0"
+APP_VERSION = "2.0"
 
 PLAN_INFO = {
     "driver": {"name": "Chauffør", "price_dkk": 79, "price_env": "STRIPE_PRICE_DRIVER", "features": ["1 chaufførkonto", "AI-diagnose", "Servicehistorik", "Påmindelser"]},
     "pro": {"name": "Vognmand Pro", "price_dkk": 199, "price_env": "STRIPE_PRICE_PRO", "features": ["Alt i Chauffør", "Flere lastbiler", "Prioriteret overblik", "Fuld historik"]},
     "fleet": {"name": "Flåde", "price_dkk": 499, "price_env": "STRIPE_PRICE_FLEET", "features": ["Alt i Pro", "Flådeoverblik", "Reparationsflow", "Prioriteret support"]},
 }
-
-# External partner integrations are deliberately OFF until real credentials are configured.
-# This prevents TruckOS from inventing stock, prices, booking slots or roadside status.
-INTEGRATIONS = {
-    "parts": ("PARTS_API_URL", "PARTS_API_KEY"),
-    "workshops": ("WORKSHOP_API_URL", "WORKSHOP_API_KEY"),
-    "roadside": ("ROADSIDE_API_URL", "ROADSIDE_API_KEY"),
-}
-
-def integration_ready(name):
-    required = INTEGRATIONS.get(name, ())
-    return bool(required) and all(os.getenv(key) for key in required)
 
 
 class DB:
@@ -150,59 +138,6 @@ def init_db():
                 done INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )""",
-            """CREATE TABLE IF NOT EXISTS repair_cases(
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                truck_id INTEGER NOT NULL,
-                diagnosis_id INTEGER NOT NULL,
-                status TEXT NOT NULL DEFAULT 'open',
-                priority TEXT NOT NULL DEFAULT 'review',
-                likely_part TEXT NOT NULL DEFAULT '',
-                part_number TEXT NOT NULL DEFAULT '',
-                notes TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )""",
-            """CREATE TABLE IF NOT EXISTS part_options(
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                case_id INTEGER NOT NULL,
-                supplier_name TEXT NOT NULL DEFAULT '',
-                country TEXT NOT NULL DEFAULT '',
-                part_number TEXT NOT NULL DEFAULT '',
-                description TEXT NOT NULL DEFAULT '',
-                price_text TEXT NOT NULL DEFAULT '',
-                stock_status TEXT NOT NULL DEFAULT 'unknown',
-                eta_text TEXT NOT NULL DEFAULT '',
-                source_url TEXT NOT NULL DEFAULT '',
-                verified INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL
-            )""",
-            """CREATE TABLE IF NOT EXISTS workshop_requests(
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                case_id INTEGER NOT NULL,
-                workshop_name TEXT NOT NULL DEFAULT '',
-                city TEXT NOT NULL DEFAULT '',
-                requested_time TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'draft',
-                contact TEXT NOT NULL DEFAULT '',
-                note TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )""",
-            """CREATE TABLE IF NOT EXISTS assistance_requests(
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                truck_id INTEGER NOT NULL,
-                case_id INTEGER NOT NULL DEFAULT 0,
-                provider TEXT NOT NULL DEFAULT '',
-                location_text TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'draft',
-                note TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )""",
             """CREATE TABLE IF NOT EXISTS subscriptions(
                 user_id INTEGER PRIMARY KEY,
                 plan TEXT NOT NULL DEFAULT 'free',
@@ -265,59 +200,6 @@ def init_db():
                 done INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )""",
-            """CREATE TABLE IF NOT EXISTS repair_cases(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                truck_id INTEGER NOT NULL,
-                diagnosis_id INTEGER NOT NULL,
-                status TEXT NOT NULL DEFAULT 'open',
-                priority TEXT NOT NULL DEFAULT 'review',
-                likely_part TEXT NOT NULL DEFAULT '',
-                part_number TEXT NOT NULL DEFAULT '',
-                notes TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )""",
-            """CREATE TABLE IF NOT EXISTS part_options(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                case_id INTEGER NOT NULL,
-                supplier_name TEXT NOT NULL DEFAULT '',
-                country TEXT NOT NULL DEFAULT '',
-                part_number TEXT NOT NULL DEFAULT '',
-                description TEXT NOT NULL DEFAULT '',
-                price_text TEXT NOT NULL DEFAULT '',
-                stock_status TEXT NOT NULL DEFAULT 'unknown',
-                eta_text TEXT NOT NULL DEFAULT '',
-                source_url TEXT NOT NULL DEFAULT '',
-                verified INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL
-            )""",
-            """CREATE TABLE IF NOT EXISTS workshop_requests(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                case_id INTEGER NOT NULL,
-                workshop_name TEXT NOT NULL DEFAULT '',
-                city TEXT NOT NULL DEFAULT '',
-                requested_time TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'draft',
-                contact TEXT NOT NULL DEFAULT '',
-                note TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )""",
-            """CREATE TABLE IF NOT EXISTS assistance_requests(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                truck_id INTEGER NOT NULL,
-                case_id INTEGER NOT NULL DEFAULT 0,
-                provider TEXT NOT NULL DEFAULT '',
-                location_text TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'draft',
-                note TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )""",
             """CREATE TABLE IF NOT EXISTS subscriptions(
                 user_id INTEGER PRIMARY KEY,
                 plan TEXT NOT NULL DEFAULT 'free',
@@ -330,13 +212,6 @@ def init_db():
         ]
     for stmt in statements:
         c.execute(stmt)
-
-    # Helpful indexes for the 1.0 workflow. Safe to run repeatedly.
-    c.execute("CREATE INDEX IF NOT EXISTS idx_repair_cases_user ON repair_cases(user_id)")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_repair_cases_diagnosis ON repair_cases(diagnosis_id)")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_part_options_case ON part_options(case_id)")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_workshop_requests_case ON workshop_requests(case_id)")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_assistance_requests_truck ON assistance_requests(truck_id)")
 
     # Safe schema upgrades from v0.4 without deleting existing data.
     ensure_column(c, "trucks", "make", "TEXT NOT NULL DEFAULT ''")
@@ -392,8 +267,6 @@ def inject_globals():
         "plans": PLAN_INFO,
         "subscription": sub,
         "integration_status": {k: integration_ready(k) for k in INTEGRATIONS},
-        "app_store_url": os.getenv("APP_STORE_URL", ""),
-        "play_store_url": os.getenv("PLAY_STORE_URL", ""),
     }
 
 
@@ -465,11 +338,6 @@ def health():
         return jsonify({"ok": True, "database": "postgres" if DATABASE_URL else "sqlite", "version": APP_VERSION})
     except Exception:
         return jsonify({"ok": False, "version": APP_VERSION}), 503
-
-
-@app.route("/download")
-def download_app():
-    return render_template("download.html")
 
 
 @app.route("/manifest.json")
@@ -602,10 +470,11 @@ def add_truck():
     name = request.form["name"].strip()[:120]; plate = request.form["plate"].strip().upper()[:30]
     if not name or not plate: flash("Navn og nummerplade skal udfyldes."); return redirect(url_for("index") + "#trucks")
     c = db(); c.execute(
-        "INSERT INTO trucks(user_id,name,plate,km,make,model,year,vin,engine,registration_country,fuel,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO trucks(user_id,name,plate,km,make,model,year,vin,engine,registration_country,fuel,service_contract_provider,service_contract_note,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (uid(), name, plate, km, request.form.get("make", "").strip()[:80], request.form.get("model", "").strip()[:80], year,
          request.form.get("vin", "").strip().upper()[:40], request.form.get("engine", "").strip()[:120],
-         request.form.get("registration_country", "DK").strip().upper()[:8], request.form.get("fuel", "").strip()[:40], now_iso()))
+         request.form.get("registration_country", "DK").strip().upper()[:8], request.form.get("fuel", "").strip()[:40],
+         request.form.get("service_contract_provider", "").strip()[:120], request.form.get("service_contract_note", "").strip()[:500], now_iso()))
     c.commit(); c.close(); flash("Lastbil tilføjet."); return redirect(url_for("index") + "#trucks")
 
 
@@ -617,11 +486,12 @@ def edit_truck(truck_id):
     if not truck: c.close(); abort(404)
     try: km = max(0, int(request.form["km"])); year = max(0, int(request.form.get("year") or 0))
     except ValueError: c.close(); flash("Kilometerstand og årgang skal være tal."); return redirect(url_for("index") + "#trucks")
-    c.execute("UPDATE trucks SET name=?, plate=?, km=?, make=?, model=?, year=?, vin=?, engine=?, registration_country=?, fuel=? WHERE id=? AND user_id=?",
+    c.execute("UPDATE trucks SET name=?, plate=?, km=?, make=?, model=?, year=?, vin=?, engine=?, registration_country=?, fuel=?, service_contract_provider=?, service_contract_note=? WHERE id=? AND user_id=?",
               (request.form["name"].strip()[:120], request.form["plate"].strip().upper()[:30], km,
                request.form.get("make", "").strip()[:80], request.form.get("model", "").strip()[:80], year,
                request.form.get("vin", "").strip().upper()[:40], request.form.get("engine", "").strip()[:120],
-               request.form.get("registration_country", "DK").strip().upper()[:8], request.form.get("fuel", "").strip()[:40], truck_id, uid()))
+               request.form.get("registration_country", "DK").strip().upper()[:8], request.form.get("fuel", "").strip()[:40],
+               request.form.get("service_contract_provider", "").strip()[:120], request.form.get("service_contract_note", "").strip()[:500], truck_id, uid()))
     c.commit(); c.close(); flash("Lastbil opdateret."); return redirect(url_for("index") + "#trucks")
 
 
@@ -906,7 +776,12 @@ def stripe_webhook():
     return "ok", 200
 
 
+def init_truckos_2():
+    from truckos_v2 import register as register_v2
+    register_v2(app)
+
+
 if __name__ == "__main__":
-    init_db(); app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
+    init_db(); init_truckos_2(); app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
 else:
-    init_db()
+    init_db(); init_truckos_2()
