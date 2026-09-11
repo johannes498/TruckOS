@@ -1,1 +1,34 @@
-<!doctype html><html lang="da"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#07111f"><meta name="description" content="TruckOS 2.0 – AI, lastbiler, service, truckparkering, brændstof, GPS og vejhjælp til chauffører og vognmænd."><title>{% block title %}TruckOS 2.0{% endblock %}</title><link rel="manifest" href="/static/manifest.json"><link rel="icon" href="/static/icon-192.png"><link rel="apple-touch-icon" href="/static/icon-192.png"><link rel="stylesheet" href="{{ url_for('static',filename='styles.css') }}"></head><body><header class="topbar"><a href="/" class="brand">🚛 <strong>TruckOS</strong><span>2.0</span></a><nav>{% if session.get('user_id') %}<a href="/road">🗺️ På vejen</a><a href="/download">📱 App</a><a href="/logout">Log ud</a>{% endif %}</nav></header>{% with messages=get_flashed_messages() %}{% if messages %}<div class="flash-wrap">{% for m in messages %}<div class="flash">{{m}}</div>{% endfor %}</div>{% endif %}{% endwith %}<main>{% block content %}{% endblock %}</main><script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/static/sw.js').catch(()=>{})}</script>{% block scripts %}{% endblock %}</body></html>
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07101f">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <meta name="description" content="TruckOS hjælper lastbilchauffører og vognmænd med lastbiler, servicehistorik, påmindelser og AI-baseret fejldiagnose.">
+  <meta name="robots" content="index, follow">
+  <title>TruckOS v{{ app_version }}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static',filename='truckos-logo.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static',filename='icon-192.png') }}">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="{{ url_for('static',filename='styles.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="{{ url_for('index') }}"><img src="{{ url_for('static',filename='icon-192.png') }}" alt=""><strong>TruckOS</strong><span>v{{ app_version }}</span></a>
+  {% if session.get('user_id') %}
+  <div class="top-actions">
+    <span class="plan-pill">{{ (subscription.plan|upper) if subscription and subscription.status in ['active','trialing'] else 'BETA' }}</span>
+    <span class="ai-pill {{ 'on' if ai_enabled else 'off' }}">AI {{ 'aktiv' if ai_enabled else 'lokal' }}</span>
+    <span class="email">{{ session.get('email') }}</span>
+    <a href="{{ url_for('logout') }}">Log ud</a>
+  </div>
+  {% endif %}
+</header>
+{% with m=get_flashed_messages() %}{% if m %}<div class="flash">{{ m[0] }}</div>{% endif %}{% endwith %}
+{% block content %}{% endblock %}
+<footer>TruckOS er beslutningsstøtte. Sikkerhedskritiske fejl skal vurderes efter producentens instruktioner og af kvalificeret fagperson.</footer>
+<script src="{{ url_for('static',filename='app.js') }}"></script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}</script>
+</body>
+</html>

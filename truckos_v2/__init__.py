@@ -1,12 +1,16 @@
 import os, json, urllib.parse, urllib.request
 from datetime import datetime
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, render_template, request, session, abort
 
 bp = Blueprint('truckos_v2', __name__, template_folder='templates', static_folder='static', static_url_path='/truckos-v2-static')
 FUEL_NETWORKS = ['Shell','Circle K','Q8','OK','Uno-X','IDS','DKV','UTA','Andet']
 
 def _uid(): return session.get('user_id')
 def _now(): return datetime.utcnow().replace(microsecond=0).isoformat()+'Z'
+def _check_csrf():
+    token=request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+    if not token or token != session.get('csrf_token'):
+        abort(400, 'Ugyldig sikkerhedstoken')
 
 def _db():
     from app import db
@@ -67,6 +71,7 @@ def fuel_cards():
     if not _uid(): return jsonify({'error':'login_required'}),401
     c=_db()
     if request.method=='POST':
+        _check_csrf()
         data=request.get_json(silent=True) or {}; network=str(data.get('network','')).strip()[:60]
         if not network: c.close(); return jsonify({'error':'network_required'}),400
         c.execute('INSERT INTO fuel_cards(user_id,network,label,active,created_at) VALUES(?,?,?,?,?)',(_uid(),network,str(data.get('label',''))[:80],1,_now())); c.commit()
@@ -76,11 +81,13 @@ def fuel_cards():
 @bp.route('/api/v2/fuel-cards/<int:card_id>', methods=['DELETE'])
 def delete_card(card_id):
     if not _uid(): return jsonify({'error':'login_required'}),401
+    _check_csrf()
     c=_db(); c.execute('DELETE FROM fuel_cards WHERE id=? AND user_id=?',(card_id,_uid())); c.commit(); c.close(); return jsonify({'ok':True})
 
 @bp.route('/api/v2/road/search', methods=['POST'])
 def road_search():
     if not _uid(): return jsonify({'error':'login_required'}),401
+    _check_csrf()
     d=request.get_json(silent=True) or {}
     try: lat=float(d['lat']); lng=float(d['lng'])
     except Exception: return jsonify({'error':'GPS-position mangler.'}),400
@@ -88,6 +95,14 @@ def road_search():
     c=_db(); c.execute('INSERT INTO road_searches(user_id,query,lat,lng,created_at) VALUES(?,?,?,?,?)',(_uid(),query,lat,lng,_now())); c.commit(); c.close()
     try: places=_overpass(lat,lng)
     except Exception: places=[]
+    low=query.lower()
+    wanted=set()
+    if any(x in low for x in ['park','raste','hvil']): wanted.add('parking')
+    if any(x in low for x in ['diesel','adblue','tank','brændstof']): wanted.add('fuel')
+    if any(x in low for x in ['lad','el','charging']): wanted.add('charging')
+    if any(x in low for x in ['vask','wash']): wanted.add('wash')
+    if any(x in low for x in ['værksted','workshop','reparation']): wanted.add('workshop')
+    if wanted: places=[p for p in places if p.get('type') in wanted or p.get('type')=='toilet']
     cards=[x['network'].lower() for x in _cards(_uid())]
     for p in places:
         p['fuel_card_match']=bool(p.get('brand') and any(x in p['brand'].lower() for x in cards))
@@ -99,6 +114,7 @@ def road_search():
 @bp.route('/api/v2/assistant', methods=['POST'])
 def assistant():
     if not _uid(): return jsonify({'error':'login_required'}),401
+    _check_csrf()
     d=request.get_json(silent=True) or {}; text=str(d.get('text','')).strip()[:1000]
     low=text.lower()
     if any(x in low for x in ['p0299','fejlkode','turbo','fejl']):

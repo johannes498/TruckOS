@@ -1,1 +1,13 @@
-{"name":"TruckOS 2.0","short_name":"TruckOS","start_url":"/","display":"standalone","background_color":"#06101d","theme_color":"#07111f","description":"TruckOS til chauffører og vognmænd","icons":[{"src":"/static/icon-192.png","sizes":"192x192","type":"image/png"},{"src":"/static/icon-512.png","sizes":"512x512","type":"image/png"}]}
+{
+  "name": "TruckOS",
+  "short_name": "TruckOS",
+  "description": "Lastbiler, service, påmindelser og AI-diagnose samlet ét sted.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07101f",
+  "theme_color": "#07101f",
+  "icons": [
+    {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"}
+  ]
+}

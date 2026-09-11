@@ -1,1 +1,17 @@
-{% extends 'base.html' %}{% block content %}<div class="auth-shell"><section class="hero-card"><div class="eyebrow">TRUCKOS 2.0</div><h1>🚛 Driven by data</h1><p>Én platform til chauffører og vognmænd – AI, lastbiler, service og På vejen.</p></section><form class="card auth-card" method="post"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><h2>{{'Opret konto' if mode=='register' else 'Log ind'}}</h2><label>E-mail<input type="email" name="email" required autocomplete="email"></label><label>Adgangskode<input type="password" name="password" minlength="8" required></label><button class="primary">{{'Opret konto' if mode=='register' else 'Log ind'}}</button>{% if mode=='register' %}<p>Har du allerede en konto? <a href="/login">Log ind</a></p>{% else %}<p>Ny bruger? <a href="/register">Opret konto</a></p>{% endif %}</form></div>{% endblock %}
+{% extends 'base.html' %}
+{% block content %}
+<main class="auth-wrap">
+  <section class="auth-card">
+    <div class="eyebrow">TruckOS</div>
+    <h1>{{ 'Opret konto' if mode=='register' else 'Velkommen tilbage' }}</h1>
+    <p class="muted">Lastbiler, servicehistorik og AI-baseret beslutningsstøtte samlet ét sted.</p>
+    <form method="post" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>E-mail<input type="email" name="email" placeholder="navn@email.dk" required></label>
+      <label>Adgangskode<input type="password" name="password" placeholder="Mindst 8 tegn" required></label>
+      <button>{{ 'Opret TruckOS-konto' if mode=='register' else 'Log ind' }}</button>
+    </form>
+    <p>{% if mode=='register' %}Har du allerede en konto? <a href="{{ url_for('login') }}">Log ind</a>{% else %}Ny bruger? <a href="{{ url_for('register') }}">Opret konto</a>{% endif %}</p>
+  </section>
+</main>
+{% endblock %}
