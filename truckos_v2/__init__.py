@@ -36,24 +36,81 @@ def init_v2_db():
     c.execute('CREATE INDEX IF NOT EXISTS idx_fuel_cards_user ON fuel_cards(user_id)')
     c.commit(); c.close()
 
-def _overpass(lat,lng,radius=12000):
-    # Baseline POI source only. It does NOT provide live parking occupancy or guaranteed prices.
-   q=f'''[out:json][timeout:18];(nwr(around:{radius},{lat},{lng})[amenity=parking][hgv=yes];nwr(around:{radius},{lat},{lng})[amenity=parking][hgv=designated];nwr(around:{radius},{lat},{lng})[highway=rest_area];nwr(around:{radius},{lat},{lng})[highway=services];nwr(around:{radius},{lat},{lng})[amenity=fuel];nwr(around:{radius},{lat},{lng})[amenity=charging_station];nwr(around:{radius},{lat},{lng})[amenity=car_wash][hgv=yes];nwr(around:{radius},{lat},{lng})[shop=truck_repair];nwr(around:{radius},{lat},{lng})[amenity=toilets];);out center tags 60;'''
-    req=urllib.request.Request('https://overpass-api.de/api/interpreter', data=urllib.parse.urlencode({'data':q}).encode(), headers={'User-Agent':'TruckOS/2.0'})
-    with urllib.request.urlopen(req, timeout=20) as r: data=json.load(r)
-    out=[]
-    for e in data.get('elements',[]):
-        t=e.get('tags',{}); la=e.get('lat') or e.get('center',{}).get('lat'); lo=e.get('lon') or e.get('center',{}).get('lon')
-        if la is None or lo is None: continue
-        amen=t.get('amenity',''); highway=t.get('highway',''); typ='sted'
-        if highway in ('rest_area','services'): typ='parking'
-elif amen=='parking': typ='parking'
-        elif amen=='fuel': typ='fuel'
-        elif amen=='charging_station': typ='charging'
-        elif amen=='car_wash': typ='wash'
-        elif t.get('shop')=='truck_repair': typ='workshop'
-        elif amen=='toilets': typ='toilet'
-        out.append({'id':f"osm-{e.get('type')}-{e.get('id')}",'name':t.get('name') or t.get('brand') or typ.title(),'type':typ,'lat':la,'lng':lo,'brand':t.get('brand',''),'opening_hours':t.get('opening_hours',''),'toilets':t.get('toilets')=='yes' or amen=='toilets','shower':t.get('shower')=='yes','food':bool(t.get('restaurant')=='yes' or t.get('fast_food')=='yes'),'hgv':t.get('hgv',''),'capacity':t.get('capacity:hgv') or t.get('capacity',''),'live_available':None,'live_status':'Live ledighed ikke tilgængelig','price':None,'updated_at':None,'source':'OpenStreetMap – ikke live'})
+def _overpass(lat, lng, radius=12000):
+    # OpenStreetMap basisdata. Ingen påstand om live-ledighed eller live-priser.
+    q = f"""
+[out:json][timeout:18];
+(
+  nwr(around:{radius},{lat},{lng})["amenity"="parking"]["hgv"="yes"];
+  nwr(around:{radius},{lat},{lng})["amenity"="parking"]["hgv"="designated"];
+  nwr(around:{radius},{lat},{lng})["highway"="rest_area"];
+  nwr(around:{radius},{lat},{lng})["highway"="services"];
+  nwr(around:{radius},{lat},{lng})["amenity"="fuel"];
+  nwr(around:{radius},{lat},{lng})["amenity"="charging_station"];
+  nwr(around:{radius},{lat},{lng})["amenity"="car_wash"]["hgv"="yes"];
+  nwr(around:{radius},{lat},{lng})["shop"="truck_repair"];
+  nwr(around:{radius},{lat},{lng})["amenity"="toilets"];
+);
+out center tags 60;
+"""
+
+    encoded = urllib.parse.urlencode({"data": q}).encode()
+
+    req = urllib.request.Request(
+        "https://overpass-api.de/api/interpreter",
+        data=encoded,
+        headers={"User-Agent": "TruckOS/2.0"},
+    )
+
+    with urllib.request.urlopen(req, timeout=20) as r:
+        data = json.load(r)
+
+    out = []
+
+    for e in data.get("elements", []):
+        tags = e.get("tags", {})
+
+        lat_value = e.get("lat")
+        lng_value = e.get("lon")
+
+        if lat_value is None:
+            lat_value = e.get("center", {}).get("lat")
+
+        if lng_value is None:
+            lng_value = e.get("center", {}).get("lon")
+
+        if lat_value is None or lng_value is None:
+            continue
+
+        amenity = tags.get("amenity", "")
+        highway = tags.get("highway", "")
+        typ = "sted"
+
+        if highway in ("rest_area", "services"):
+            typ = "parking"
+        elif amenity == "parking":
+            typ = "parking"
+        elif amenity == "fuel":
+            typ = "fuel"
+        elif amenity == "charging_station":
+            typ = "charging"
+        elif amenity == "car_wash":
+            typ = "wash"
+        elif tags.get("shop") == "truck_repair":
+            typ = "workshop"
+        elif amenity == "toilets":
+            typ = "toilet"
+
+        out.append({
+            "id": f"osm-{e.get('type')}-{e.get('id')}",
+            "name": tags.get("name") or tags.get("brand") or typ.title(),
+            "type": typ,
+            "lat": lat_value,
+            "lng": lng_value,
+            "brand": tags.get("brand", ""),
+            "opening_hours": tags.get("opening_hours", ""),
+        })
+
     return out
 
 def _cards(user_id):
