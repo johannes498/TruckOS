@@ -38,15 +38,16 @@ def init_v2_db():
 
 def _overpass(lat,lng,radius=12000):
     # Baseline POI source only. It does NOT provide live parking occupancy or guaranteed prices.
-    q=f'''[out:json][timeout:18];(nwr(around:{radius},{lat},{lng})[amenity=parking][hgv=yes];nwr(around:{radius},{lat},{lng})[amenity=fuel];nwr(around:{radius},{lat},{lng})[amenity=charging_station];nwr(around:{radius},{lat},{lng})[amenity=car_wash][hgv=yes];nwr(around:{radius},{lat},{lng})[shop=truck_repair];nwr(around:{radius},{lat},{lng})[amenity=toilets];);out center tags 60;'''
+   q=f'''[out:json][timeout:18];(nwr(around:{radius},{lat},{lng})[amenity=parking][hgv=yes];nwr(around:{radius},{lat},{lng})[amenity=parking][hgv=designated];nwr(around:{radius},{lat},{lng})[highway=rest_area];nwr(around:{radius},{lat},{lng})[highway=services];nwr(around:{radius},{lat},{lng})[amenity=fuel];nwr(around:{radius},{lat},{lng})[amenity=charging_station];nwr(around:{radius},{lat},{lng})[amenity=car_wash][hgv=yes];nwr(around:{radius},{lat},{lng})[shop=truck_repair];nwr(around:{radius},{lat},{lng})[amenity=toilets];);out center tags 60;'''
     req=urllib.request.Request('https://overpass-api.de/api/interpreter', data=urllib.parse.urlencode({'data':q}).encode(), headers={'User-Agent':'TruckOS/2.0'})
     with urllib.request.urlopen(req, timeout=20) as r: data=json.load(r)
     out=[]
     for e in data.get('elements',[]):
         t=e.get('tags',{}); la=e.get('lat') or e.get('center',{}).get('lat'); lo=e.get('lon') or e.get('center',{}).get('lon')
         if la is None or lo is None: continue
-        amen=t.get('amenity',''); typ='sted'
-        if amen=='parking': typ='parking'
+        amen=t.get('amenity',''); highway=t.get('highway',''); typ='sted'
+        if highway in ('rest_area','services'): typ='parking'
+elif amen=='parking': typ='parking'
         elif amen=='fuel': typ='fuel'
         elif amen=='charging_station': typ='charging'
         elif amen=='car_wash': typ='wash'
